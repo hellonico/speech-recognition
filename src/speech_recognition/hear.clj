@@ -10,16 +10,21 @@
            (javaFlacEncoder FLAC_FileEncoder
                             StreamConfiguration)))
 
-(def ^:dynamic *google-url*
-  "https://www.google.com/speech-api/v1/recognize?xjerr=1&client=chromium&lang=en-US")
 
 (def ^:dynamic *input-index* 
   "Default index of the recording device; NB: this is a hack."
-  1)
+  2)
 
-(def ^:dynamic *sample-rate* 8000)
+(def ^:dynamic *sample-rate* 44000)
+
+(def ^:dynamic *language* "ja-JP")
+
+(def ^:dynamic *google-url*
+  "https://www.google.com/speech-api/v1/recognize?xjerr=1&client=chromium&lang=")
 
 (def ^:dynamic *sample-size* 16)
+
+(def ^:dynamic *sample-time* 5000) ; 5seconds
 
 (def ^:dynamic *channels* 1)
 
@@ -38,10 +43,10 @@
 (defn post-to-google [flac]
   (:body
       (client/post
-       *google-url*
-       {:multipart [["Content" flac]]
-        :headers {"Content-type"
-                  (format "audio/x-flac; rate=%s" *sample-rate*)}})))
+       (str *google-url* *language*)
+       {
+        :headers {"Content-type" (format "audio/x-flac; rate=%s" *sample-rate*)}
+        :body (clojure.java.io/input-stream flac)})))
 
 (defn sort-hypotheses [hypotheses]
   (sort-by (fn [hypothesis]
@@ -52,6 +57,7 @@
               hypotheses))
 
 (defn parse-response [response]
+  ; (println response)
   (let [{status :status
          id :id
          hypotheses :hypotheses}
@@ -62,32 +68,41 @@
     utterance))
 
 (defn hear []
-  (let [mixer-info (clojure.core/get (AudioSystem/getMixerInfo) *input-index*)
+  (let [mixer-info (clojure.core/get (javax.sound.sampled.AudioSystem/getMixerInfo) *input-index*)
         target (AudioSystem/getTargetDataLine *format* mixer-info)]
     ;; `with-open'?
     (.open target *format*)
-    (println "I'm listening.")
     (.start target)
+    (println "I'm listening in " *language* " for " *sample-time* " ms." )
     (.start (Thread.
              (fn []
-                (read-line)
+                (Thread/sleep *sample-time*)
                 (.flush target)
                 (.stop target)
                 (.close target)
-                (println "I'm considering."))))
+                (println "|"))))
     (let [input-stream (new AudioInputStream target)]
       (let [wave (fs/temp-file "hear" ".wav")
             flac (fs/temp-file "hear" ".flac")]
         (AudioSystem/write input-stream
                            AudioFileFormat$Type/WAVE
                            wave)
-        (let [encoder (new FLAC_FileEncoder)]
-          (.setStreamConfig encoder
-                            (new StreamConfiguration
-                                 *channels*
-                                 StreamConfiguration/DEFAULT_MIN_BLOCK_SIZE
-                                 StreamConfiguration/DEFAULT_MAX_BLOCK_SIZE
-                                 *sample-rate*
-                                 *sample-size*))
+        (let [encoder (FLAC_FileEncoder.)]
+          ; (.setStreamConfig encoder
+          ;                   (new StreamConfiguration
+          ;                        *channels*
+          ;                        StreamConfiguration/DEFAULT_MIN_BLOCK_SIZE
+          ;                        StreamConfiguration/DEFAULT_MAX_BLOCK_SIZE
+          ;                        *sample-rate*
+          ;                        *sample-size*))
           (.encode encoder wave flac)
-          (parse-response (post-to-google flac)))))))
+          (parse-response (post-to-google flac))
+            )))))
+
+(defn -main [& args]
+  (if args
+   (do 
+    (println "Binding to language " (first args))
+    (binding [*language* (first args)]
+    (hear)))
+   (hear)))
