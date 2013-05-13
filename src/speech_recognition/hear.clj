@@ -13,7 +13,7 @@
 
 (def ^:dynamic *input-index* 
   "Default index of the recording device; NB: this is a hack."
-  2)
+  1)
 
 (def ^:dynamic *sample-rate* 44000)
 
@@ -26,11 +26,11 @@
 
 (def ^:dynamic *sample-time* 5000) ; 5seconds
 
-(def ^:dynamic *channels* 1)
+(def ^:dynamic *channels* 2)
 
 (def ^:dynamic *signed* true)
 
-(def ^:dynamic *big-endian* false)
+(def ^:dynamic *big-endian* true)
 
 (def ^:dynamic *format*
   (new AudioFormat
@@ -55,6 +55,10 @@
                    confidence))
               >
               hypotheses))
+
+(defn get-mixers[]
+  (doseq [mixer (javax.sound.sampled.AudioSystem/getMixerInfo)] 
+    (println mixer)))
 
 (defn parse-response [response]
   ; (println response)
